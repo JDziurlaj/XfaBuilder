@@ -17,6 +17,8 @@ using iTextSharp.text.pdf;
  */
 namespace XfaPdfBuilder
 {
+    enum LayoutStyle { Stream, Array }
+
     class ShellXdpPdf
     {
         private Stream outputStream;
@@ -38,6 +40,12 @@ namespace XfaPdfBuilder
         public const String XFA_TEMPLATE_SCHEMA_2_8 = "http://www.xfa.org/schema/xfa-template/2.8/";
         public const String XFA_CONFIG_SCHEMA_2_8 = "http://www.xfa.org/schema/xci/2.8/";
         public const String XFA_LOCALE_SCHEMA_2_7 = "http://www.xfa.org/schema/xfa-locale-set/2.7/";
+
+        //New style
+        private XmlDocument package;        
+        private Dictionary<String, XmlDocument> XFANodes;
+
+
 
         private PdfStream metadataPs;
         private PdfStream datasetsPs;
@@ -66,69 +74,6 @@ namespace XfaPdfBuilder
         PdfString datasetsStr = new PdfString("datasets");
         PdfString closexdpStr = new PdfString("postamble");
 
-        private static PdfIndirectReference WriteTTF(string fontName, PdfWriter writer, out TrueTypeFont ttf)
-        {
-            var fontobj = FontFactory.GetFont(fontName);
-            ttf = (TrueTypeFont)fontobj.BaseFont;
-            //BaseFont.CreateFont(fontName, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
-
-            int firstChar = 0;
-            int lastChar = 255;
-            byte[] shortTag = new byte[256];
-            bool subsetp = false;
-            if (!subsetp)
-            {
-                firstChar = 0;
-                lastChar = shortTag.Length - 1;
-                for (int k = 0; k < shortTag.Length; ++k)
-                    shortTag[k] = 1;
-            }
-            PdfIndirectReference ind_font = null;
-            PdfObject pobj = null;
-            PdfIndirectObject obj = null;
-            string subsetPrefix = "";
-
-            pobj = ttf.GetFontDescriptor(ind_font, subsetPrefix, null);
-            if (pobj != null)
-            {
-                obj = writer.AddToBody(pobj);
-                ind_font = obj.IndirectReference;
-            }
-            //TODO CHANGE ME!
-            string style = "";
-
-            PdfDictionary dic = new PdfDictionary(PdfName.FONT);
-            if (ttf.Cff)
-            {
-                dic.Put(PdfName.SUBTYPE, PdfName.TYPE1);
-                dic.Put(PdfName.BASEFONT, new PdfName(ttf.PostscriptFontName + style));
-            }
-            else
-            {
-                dic.Put(PdfName.SUBTYPE, PdfName.TRUETYPE);
-                dic.Put(PdfName.BASEFONT, new PdfName(subsetPrefix + ttf.PostscriptFontName + style));
-            }
-            dic.Put(PdfName.BASEFONT, new PdfName(subsetPrefix + ttf.PostscriptFontName + style));
-
-            if (ttf.Encoding.Equals(BaseFont.CP1252) || ttf.Encoding.Equals(BaseFont.MACROMAN))
-                dic.Put(PdfName.ENCODING, ttf.Encoding.Equals(BaseFont.CP1252) ? PdfName.WIN_ANSI_ENCODING : PdfName.MAC_ROMAN_ENCODING);
-
-            dic.Put(PdfName.FIRSTCHAR, new PdfNumber(firstChar));
-            dic.Put(PdfName.LASTCHAR, new PdfNumber(lastChar));
-            PdfArray wd = new PdfArray();
-            for (int k = firstChar; k <= lastChar; ++k)
-            {
-                if (shortTag[k] == 0)
-                    wd.Add(new PdfNumber(0));
-                else
-                    wd.Add(new PdfNumber(ttf.Widths[k]));
-            }
-            dic.Put(PdfName.WIDTHS, wd);
-            if (ind_font != null)
-                dic.Put(PdfName.FONTDESCRIPTOR, ind_font);
-
-            return writer.AddToBody(dic).IndirectReference;
-        }
         /// <summary>
         /// Create a Shell PDF. This type of PDF contains all
         /// XFA boilerplate inside the XFA stream.
@@ -142,6 +87,8 @@ namespace XfaPdfBuilder
         /// <param name="output"></param>
         public ShellXdpPdf(Stream output)
         {
+            // create a place to store our streams
+            XFANodes = new Dictionary<String, XmlDocument>();
             shellDocument = new Document();
             outputStream = output;
             
@@ -172,15 +119,18 @@ namespace XfaPdfBuilder
 
             acroForm.Put(PdfName.DA, new PdfString("/Helv 0 Tf 0 g "));
 
-            var templateXmlDocument = new XmlDocument();
-            templateXmlDocument.Load(new MemoryStream(templateBytes));
+            //TODO don't assume!
+            var templateXmlDocument = XFANodes["template"];
+
+            //var templateXmlDocument = new XmlDocument();
+            //templateXmlDocument.Load(new MemoryStream(templateBytes));
             XmlNamespaceManager nsmgr = new XmlNamespaceManager(templateXmlDocument.NameTable);
             //must provide namespace!
             //http://msdn.microsoft.com/en-us/library/e5t11tzt%28v=vs.110%29.aspx
             nsmgr.AddNamespace("template", "http://www.xfa.org/schema/xfa-template/2.8/");
             //http://www.xfa.org/schema/xfa-template/3.3/ (ES4)
             #region XFA External Resources
-            ResolveExternals(ref templateXmlDocument, nsmgr);
+            //ResolveExternals(ref templateXmlDocument, nsmgr);
             #endregion
 
             #region XFA Fonts
@@ -225,7 +175,29 @@ namespace XfaPdfBuilder
             //var font = FontFactory.GetFont("Arial");
             //templ.SetFontAndSize(font.BaseFont, 12);                                                
 
-            if (xdpPs != null)
+            if(package != null)
+            {
+                byte[] bytes = System.Text.Encoding.ASCII.GetBytes(package.InnerXml);
+                var currentPs = new PdfStream(bytes);
+                currentPs.FlateCompress(writer.CompressionLevel);
+                var curRef = writer.AddToBody(currentPs).IndirectReference;
+                PdfString curStr = new PdfString("preamble");
+                xfaArr.Add(curStr);
+                xfaArr.Add(curRef);
+            }
+
+            foreach(var packet in XFANodes)
+            {
+                byte[] bytes = System.Text.Encoding.ASCII.GetBytes(packet.Value.InnerXml);                
+                var currentPs = new PdfStream(bytes);
+                currentPs.FlateCompress(writer.CompressionLevel);
+                var curRef = writer.AddToBody(currentPs).IndirectReference;
+                PdfString curStr = new PdfString(packet.Key);
+                xfaArr.Add(curStr);
+                xfaArr.Add(curRef);
+            }
+
+            /*if (xdpPs != null)
             {
                 var xdpRef = writer.AddToBody(xdpPs).IndirectReference;
                 xfaArr.Add(xdpStr);
@@ -280,6 +252,7 @@ namespace XfaPdfBuilder
                 xfaArr.Add(closexdpStr);
                 xfaArr.Add(closexdpRef);
             }
+             * */
             //wire it up
             
             acroForm.Put(new PdfName("XFA"), xfaArr);
@@ -385,6 +358,11 @@ namespace XfaPdfBuilder
             metadataPs.FlateCompress(writer.CompressionLevel);
         }
 
+        public void SetPackage(XmlDocument node)
+        {
+          this.package = node;
+        }
+
         public void SetPreamble(Stream xdpFs)
         {
             var xdpReader = new BinaryReader(xdpFs);
@@ -393,14 +371,23 @@ namespace XfaPdfBuilder
             xdpPs.FlateCompress(writer.CompressionLevel);
         }
 
-        public void SetConfig(Stream configFs)
+        public void SetConfig(XmlDocument packet)
         {
+            XFANodes.Add("config", packet);
+        }
+
+        public void SetConfig(Stream configFs)
+        {            
             var configReader = new BinaryReader(configFs);
             byte[] configBytes = configReader.ReadBytes((int)configFs.Length);
             configPs = new PdfStream(configBytes);
             configPs.FlateCompress(writer.CompressionLevel);
         }
 
+        public void SetTemplate(XmlDocument packet)
+        {
+            XFANodes.Add("template", packet);
+        }
         
         public void SetTemplate(Stream templateFs)
         {
@@ -450,12 +437,80 @@ namespace XfaPdfBuilder
             datasetsPs.FlateCompress(writer.CompressionLevel);
         }
 
+        public void SetPostamble(XmlElement node)
+        {
+           // this.postamble = node;
+        }
+
         public void SetPostamble(Stream closexdpFs)
         {
             var closexdpReader = new BinaryReader(closexdpFs);
             byte[] closexdpBytes = closexdpReader.ReadBytes((int)closexdpFs.Length);
             closexdpPs = new PdfStream(closexdpBytes);
             closexdpPs.FlateCompress(writer.CompressionLevel);
+        }
+        private static PdfIndirectReference WriteTTF(string fontName, PdfWriter writer, out TrueTypeFont ttf)
+        {
+            var fontobj = FontFactory.GetFont(fontName);
+            ttf = (TrueTypeFont)fontobj.BaseFont;
+            //BaseFont.CreateFont(fontName, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+
+            int firstChar = 0;
+            int lastChar = 255;
+            byte[] shortTag = new byte[256];
+            bool subsetp = false;
+            if (!subsetp)
+            {
+                firstChar = 0;
+                lastChar = shortTag.Length - 1;
+                for (int k = 0; k < shortTag.Length; ++k)
+                    shortTag[k] = 1;
+            }
+            PdfIndirectReference ind_font = null;
+            PdfObject pobj = null;
+            PdfIndirectObject obj = null;
+            string subsetPrefix = "";
+
+            pobj = ttf.GetFontDescriptor(ind_font, subsetPrefix, null);
+            if (pobj != null)
+            {
+                obj = writer.AddToBody(pobj);
+                ind_font = obj.IndirectReference;
+            }
+            //TODO CHANGE ME!
+            string style = "";
+
+            PdfDictionary dic = new PdfDictionary(PdfName.FONT);
+            if (ttf.Cff)
+            {
+                dic.Put(PdfName.SUBTYPE, PdfName.TYPE1);
+                dic.Put(PdfName.BASEFONT, new PdfName(ttf.PostscriptFontName + style));
+            }
+            else
+            {
+                dic.Put(PdfName.SUBTYPE, PdfName.TRUETYPE);
+                dic.Put(PdfName.BASEFONT, new PdfName(subsetPrefix + ttf.PostscriptFontName + style));
+            }
+            dic.Put(PdfName.BASEFONT, new PdfName(subsetPrefix + ttf.PostscriptFontName + style));
+
+            if (ttf.Encoding.Equals(BaseFont.CP1252) || ttf.Encoding.Equals(BaseFont.MACROMAN))
+                dic.Put(PdfName.ENCODING, ttf.Encoding.Equals(BaseFont.CP1252) ? PdfName.WIN_ANSI_ENCODING : PdfName.MAC_ROMAN_ENCODING);
+
+            dic.Put(PdfName.FIRSTCHAR, new PdfNumber(firstChar));
+            dic.Put(PdfName.LASTCHAR, new PdfNumber(lastChar));
+            PdfArray wd = new PdfArray();
+            for (int k = firstChar; k <= lastChar; ++k)
+            {
+                if (shortTag[k] == 0)
+                    wd.Add(new PdfNumber(0));
+                else
+                    wd.Add(new PdfNumber(ttf.Widths[k]));
+            }
+            dic.Put(PdfName.WIDTHS, wd);
+            if (ind_font != null)
+                dic.Put(PdfName.FONTDESCRIPTOR, ind_font);
+
+            return writer.AddToBody(dic).IndirectReference;
         }
     }
 
@@ -466,19 +521,44 @@ namespace XfaPdfBuilder
             var fs = new FileStream("C:\\Users\\John\\Desktop\\pdf\\emi.pdf", FileMode.Create);
             var shell = new ShellXdpPdf(fs);
             shell.resolverPath = "C:\\Users\\John\\Desktop\\pdf";
-            shell.ShellDocument.Add(new Paragraph("Your PDF reader cannot render XFA documents. Try Adobe Acrobat or Adobe Reader."));                                           
-             //template, datasets and config packets are always required!
-            shell.SetPreamble(new FileStream("c:\\temp\\xfabuilder\\preamble", FileMode.Open));
-            shell.SetConfig(new FileStream("c:\\temp\\xfabuilder\\config", FileMode.Open));
-            shell.SetTemplate(new FileStream("c:\\temp\\xfabuilder\\template", FileMode.Open));
+            shell.ShellDocument.Add(new Paragraph("Your PDF reader cannot render XFA documents. Try Adobe Acrobat or Adobe Reader."));
+            //template, datasets and config packets are always required!            
+            
+            {
+                /*var fs = new FileStream("c:\\temp\\xfabuilder\\preamble", FileMode.Open);
+                        
+                StreamReader sr = new StreamReader(fs);
+                elem.InnerXml = sr.ReadToEnd();
+                */
+                var xmlDoc = new XmlDocument();
+                xmlDoc.Load("c:\\temp\\xfabuilder\\xdp");
+                shell.SetPackage(xmlDoc);
+
+            }
+            {
+                var xmlDoc = new XmlDocument();
+                xmlDoc.Load("c:\\temp\\xfabuilder\\config");
+                shell.SetConfig(xmlDoc);
+            }
+            {
+                var xmlDoc = new XmlDocument();
+                xmlDoc.Load("c:\\temp\\xfabuilder\\template");
+                shell.SetTemplate(xmlDoc);
+            }
+            //shell.SetConfig(new FileStream("c:\\temp\\xfabuilder\\config", FileMode.Open));
+           // shell.SetTemplate(new FileStream("c:\\temp\\xfabuilder\\template", FileMode.Open));
             //shell.SetLocaleSet(new FileStream("c:\\temp\\xfabuilder\\localeSet", FileMode.Open));
             //shell.SetXmpMeta(new FileStream("c:\\temp\\xfabuilder\\xmpmeta", FileMode.Open));
             //shell.SetXfdf(new FileStream("c:\\temp\\xfabuilder\\xfdf", FileMode.Open));
             //shell.SetForm(new FileStream("c:\\temp\\xfabuilder\\form", FileMode.Open));
             //shell.SetDatasets(new FileStream("c:\\temp\\xfabuilder\\datasets", FileMode.Open));
-            shell.SetPostamble(new FileStream("c:\\temp\\xfabuilder\\postamble", FileMode.Open));
+            /*{
+                var xmlDoc = new XmlDocument();
+                xmlDoc.Load("c:\\temp\\xfabuilder\\postamble");
+            }*/
+            //shell.SetPostamble(new FileStream("c:\\temp\\xfabuilder\\postamble", FileMode.Open));
             //shell.SetMetaData(new FileStream("c:\\temp\\xfabuilder\\metadata", FileMode.Open));
-            shell.Close();            
+            shell.Close();
         }
     }
 }
