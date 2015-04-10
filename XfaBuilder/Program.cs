@@ -349,7 +349,7 @@ namespace XfaPdfBuilder
             extensionsDic.Put(new PdfName("ADBE"), adbeDic);
             writer.ExtraCatalog.Put(new PdfName("Extensions"), extensionsDic);
         }
-
+        #region StreamSetters
         public void SetMetaData(Stream metadataFs)
         {
             var MetadataReader = new BinaryReader(metadataFs);
@@ -449,6 +449,7 @@ namespace XfaPdfBuilder
             closexdpPs = new PdfStream(closexdpBytes);
             closexdpPs.FlateCompress(writer.CompressionLevel);
         }
+        #endregion
         private static PdfIndirectReference WriteTTF(string fontName, PdfWriter writer, out TrueTypeFont ttf)
         {
             var fontobj = FontFactory.GetFont(fontName);
