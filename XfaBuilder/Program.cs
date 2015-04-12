@@ -17,6 +17,8 @@ using iTextSharp.text.pdf;
  */
 namespace XfaPdfBuilder
 {
+    /* A PDF reader may ignore any value which is a single stream as that form is deprecated. 
+     * Use pf Array is thus strongly recommended */
     enum LayoutStyle { Stream, Array }
 
     class ShellXdpPdf
@@ -113,6 +115,9 @@ namespace XfaPdfBuilder
             writer.ExtraCatalog.Put(new PdfName("NeedsRendering"), new PdfBoolean(true));
             AddPdfMetaData();
             AddExtensionsDictionary();
+            ShellDocument.SetPageSize(PageSize.LETTER);
+            //ShellDocument.SetMargins(PageSize.LETTER.Left, PageSize.LETTER.Right, PageSize.LETTER.Top, PageSize.LETTER.Bottom);
+            
             shellDocument.Open();
             writer.Open();
         }
@@ -582,9 +587,15 @@ namespace XfaPdfBuilder
                  var copier = shell.Writer as PdfCopy;
                  copier.AddPage(shell.Writer.GetImportedPage(pr, i));
              }*/
-
-            shell.ShellDocument.Add(new Paragraph("Your PDF reader cannot render XFA documents. Try Adobe Acrobat or Adobe Reader."));
             
+            var font  = new Font(iTextSharp.text.Font.FontFamily.TIMES_ROMAN);
+            var para = new Paragraph("Your PDF reader cannot render XFA documents. Try Adobe Acrobat or Adobe Reader.", font);                      
+            
+            shell.ShellDocument.Add(para);
+            //does nothing, but write it out, to match ES4 output
+            shell.Writer.AddPageDictEntry(PdfName.ROTATE, new PdfNumber(0));
+            shell.Writer.AddPageDictEntry(PdfName.CROPBOX, new PdfRectangle(PageSize.LETTER));
+
             //template, datasets and config packets are always required!            
             if (currentMethod == LayoutStyle.Stream)
             {
@@ -596,14 +607,26 @@ namespace XfaPdfBuilder
             else
             {
                 {
+                    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0100_VersChkStrings", FileMode.Open));
+                    shell.Writer.AddJavaScript("!ADBE::0100_VersChkStrings", reader.ReadToEnd());
+                }
+                {
+                    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0100_VersChkVars", FileMode.Open));
+                    shell.Writer.AddJavaScript("!ADBE::0100_VersChkVars", reader.ReadToEnd());
+                }
+                {
+                    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0200_VersChkCode_XFACheck", FileMode.Open));
+                    shell.Writer.AddJavaScript("!ADBE::0200_VersChkCode_XFACheck", reader.ReadToEnd());
+                }
+                {
                     var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\preamble", FileMode.Open));
                     shell.SetPreamble(reader.ReadToEnd());
                 }
-                {
+              /*  {
                     var xmlDoc = new XmlDocument();
                     xmlDoc.Load("c:\\temp\\xfabuilder\\config");
                     shell.SetConfig(xmlDoc);
-                }
+                }*/
                 {
                     var xmlDoc = new XmlDocument();
                     xmlDoc.Load("c:\\temp\\xfabuilder\\template");
