@@ -33,11 +33,12 @@ namespace XfaPdfBuilder
         private PdfWriter writer;
         public PdfWriter Writer { get { return writer; } }
         
-        /* we have chosen to handle the creation as a array containing the specific packets instead of a single
+        /* we have chosen to support the creation as a array containing the specific packets instead of a single
          * stream, but it may actually be easier for users to work with the single stream, as it would allow
          * a copy / paste from Designer with no additional parsing effort.
          */
         public LayoutStyle style = LayoutStyle.Array;
+
         public const String XFA_DATA_SCHEMA = "http://www.xfa.org/schema/xfa-data/1.0/";
         public const String XDP_SCHEMA = "http://ns.adobe.com/xdp/";
         /* 2.8 is the version created by Designer ES2 */
@@ -67,16 +68,17 @@ namespace XfaPdfBuilder
         public const String POSTAMBLE = "postamble";
 
 
-        /* If a user wants to work with a package instead of a stream they can set this */
+        /* If a user wants to work with a stream instead of an array they can set this */
         private XmlDocument package;        
         /* Contains all the XFA Packets */
-        private List<KeyValuePair<string,XmlDocument>> XFANodes;
-        /* These must be handled separately as their order matters*/
+        private List<KeyValuePair<string,XmlDocument>> XfaPackets;
+        /* These packets must be handled separately as their order matters*/
         private string preamble { get; set; }
         private string postamble { get; set; }
+
+        /* Non packet data */
         private XmlDocument xmpMeta { get; set; }
-
-
+        
         private PdfStream metadataPs;   
 
         PdfString xdpStr = new PdfString("preamble");
@@ -91,7 +93,7 @@ namespace XfaPdfBuilder
 
         /// <summary>
         /// Create a Shell PDF. This type of PDF contains all
-        /// XFA boilerplate inside the XFA stream.
+        /// XFA data inside the XFA dictionary entry.
         /// A PDF "boilerplate" is displayed if the viewer
         /// doesn't understand XFA.
         /// Limitations        
@@ -103,7 +105,7 @@ namespace XfaPdfBuilder
         public ShellXdpPdf(Stream output)
         {
             // create a place to store our streams
-            XFANodes = new List<KeyValuePair<String, XmlDocument>>();
+            XfaPackets = new List<KeyValuePair<String, XmlDocument>>();
             shellDocument = new Document();
             outputStream = output;
 
@@ -138,7 +140,7 @@ namespace XfaPdfBuilder
             acroForm.Put(PdfName.DA, new PdfString("/Helv 0 Tf 0 g "));
 
             //TODO don't assume!
-            var templateXmlDocument = XFANodes.Single(o => o.Key == "template").Value;
+            var templateXmlDocument = XfaPackets.Single(o => o.Key == "template").Value;
             XmlNamespaceManager nsmgr = new XmlNamespaceManager(templateXmlDocument.NameTable);
             //must provide namespace!
             //http://msdn.microsoft.com/en-us/library/e5t11tzt%28v=vs.110%29.aspx
@@ -190,52 +192,72 @@ namespace XfaPdfBuilder
             //var font = FontFactory.GetFont("Arial");
             //templ.SetFontAndSize(font.BaseFont, 12);                                                
             #region XFA Generation
-            if (package != null)
+            if (style == LayoutStyle.Stream)
             {
-                byte[] bytes = System.Text.Encoding.ASCII.GetBytes(package.InnerXml);
-                var currentPs = new PdfStream(bytes);
-                currentPs.FlateCompress(writer.CompressionLevel);
-                var curRef = writer.AddToBody(currentPs).IndirectReference;
-                PdfString curStr = new PdfString("preamble");
-                acroForm.Put(new PdfName("XFA"), curRef);
-                Console.WriteLine(String.Format("Writing out stream {0}: {1} bytes", "XFA", bytes.Length));
+                if (package != null)
+                {
+                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(package.InnerXml);
+                    var currentPs = new PdfStream(bytes);
+                    currentPs.FlateCompress(writer.CompressionLevel);
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;
+                    PdfString curStr = new PdfString("preamble");
+                    acroForm.Put(new PdfName("XFA"), curRef);
+                    Console.WriteLine(String.Format("Writing out stream {0}: {1} bytes", "XFA", bytes.Length));
+                }
+                else
+                {
+                    var streamStr = new StringBuilder();
+                    streamStr.Append(preamble);
+                    foreach (var packet in XfaPackets)
+                    {
+                        streamStr.Append(packet.Value.InnerXml);
+                    }
+                    streamStr.Append(postamble);
+                    throw new NotImplementedException("Software does not currently know how to convert from Array to Stream format.");
+                }
             }
             else
             {
-
+                if (package != null)
                 {
-                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(preamble);
-                    var currentPs = new PdfStream(bytes);
-                    currentPs.FlateCompress(writer.CompressionLevel);
-                    var curRef = writer.AddToBody(currentPs).IndirectReference;
-                    PdfString curStr = new PdfString("preamble");
-                    xfaArr.Add(curStr);
-                    xfaArr.Add(curRef);
-                    Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "preamble", bytes.Length));
+                    throw new NotImplementedException("Software does not currently know how to convert from Stream to Array format.");
                 }
-                /* The packets can appear in any order */
-                foreach (var packet in XFANodes)
+                else
                 {
-                    //TODO - do a raw byte copy
-                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(packet.Value.InnerXml);
-                    var currentPs = new PdfStream(bytes);
-                    currentPs.FlateCompress(writer.CompressionLevel);
-                    var curRef = writer.AddToBody(currentPs).IndirectReference;
-                    PdfString curStr = new PdfString(packet.Key);
-                    xfaArr.Add(curStr);
-                    xfaArr.Add(curRef);
-                    Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", packet.Key, bytes.Length));
-                }
-                {
-                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(postamble);
-                    var currentPs = new PdfStream(bytes);
-                    currentPs.FlateCompress(writer.CompressionLevel);
-                    var curRef = writer.AddToBody(currentPs).IndirectReference;
-                    PdfString curStr = new PdfString("preamble");
-                    xfaArr.Add(curStr);
-                    xfaArr.Add(curRef);
-                    Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "postamble", bytes.Length));
+                    {
+                        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(preamble);
+                        var currentPs = new PdfStream(bytes);
+                        currentPs.FlateCompress(writer.CompressionLevel);
+                        var curRef = writer.AddToBody(currentPs).IndirectReference;
+                        PdfString curStr = new PdfString("preamble");
+                        xfaArr.Add(curStr);
+                        xfaArr.Add(curRef);
+                        Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "preamble", bytes.Length));
+                    }
+                    /* The packets can appear in any order */
+                    foreach (var packet in XfaPackets)
+                    {
+                        //TODO - do a raw byte copy
+                        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(packet.Value.InnerXml);
+                        var currentPs = new PdfStream(bytes);
+                        currentPs.FlateCompress(writer.CompressionLevel);
+                        var curRef = writer.AddToBody(currentPs).IndirectReference;
+                        PdfString curStr = new PdfString(packet.Key);
+                        xfaArr.Add(curStr);
+                        xfaArr.Add(curRef);
+                        Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", packet.Key, bytes.Length));
+                    }
+                    {
+                        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(postamble);
+                        var currentPs = new PdfStream(bytes);
+                        currentPs.FlateCompress(writer.CompressionLevel);
+                        var curRef = writer.AddToBody(currentPs).IndirectReference;
+                        PdfString curStr = new PdfString("preamble");
+                        xfaArr.Add(curStr);
+                        xfaArr.Add(curRef);
+                        Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "postamble", bytes.Length));
 
+                    }
                 }
                 acroForm.Put(new PdfName("XFA"), xfaArr);
             }
@@ -366,8 +388,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetConfig(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == CONFIG);
-            XFANodes.Add(new KeyValuePair<string,XmlDocument>(CONFIG, packet));
+            XfaPackets.RemoveAll(o => o.Key == CONFIG);
+            XfaPackets.Add(new KeyValuePair<string,XmlDocument>(CONFIG, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -375,8 +397,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetConnectionSet(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == CONNECTION_SET);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(CONNECTION_SET, packet));
+            XfaPackets.RemoveAll(o => o.Key == CONNECTION_SET);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(CONNECTION_SET, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -384,8 +406,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetDatasets(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == DATASETS);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(DATASETS, packet));
+            XfaPackets.RemoveAll(o => o.Key == DATASETS);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(DATASETS, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -393,8 +415,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetLocaleSet(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == LOCALE_SET);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(LOCALE_SET, packet));                
+            XfaPackets.RemoveAll(o => o.Key == LOCALE_SET);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(LOCALE_SET, packet));                
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -402,8 +424,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetForm(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == FORM);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(FORM, packet));
+            XfaPackets.RemoveAll(o => o.Key == FORM);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(FORM, packet));
         }
         public void SetMetaData(Stream metadataFs)
         {
@@ -418,8 +440,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetPdf(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == PDF);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(PDF, packet));
+            XfaPackets.RemoveAll(o => o.Key == PDF);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(PDF, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -427,8 +449,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetSourceSet(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == SOURCE_SET);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(SOURCE_SET, packet));
+            XfaPackets.RemoveAll(o => o.Key == SOURCE_SET);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(SOURCE_SET, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -436,8 +458,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetStyleSheet(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == STYLESHEET);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(STYLESHEET, packet));
+            XfaPackets.RemoveAll(o => o.Key == STYLESHEET);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(STYLESHEET, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packets
@@ -445,9 +467,9 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packets to add</param>
         public void SetStyleSheet(XmlDocument[] packets)
         {
-            XFANodes.RemoveAll(o => o.Key == STYLESHEET);
+            XfaPackets.RemoveAll(o => o.Key == STYLESHEET);
             foreach(var packet in packets)
-                XFANodes.Add(new KeyValuePair<string, XmlDocument>(STYLESHEET, packet));
+                XfaPackets.Add(new KeyValuePair<string, XmlDocument>(STYLESHEET, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -455,8 +477,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetTemplate(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == TEMPLATE);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(TEMPLATE, packet));                 
+            XfaPackets.RemoveAll(o => o.Key == TEMPLATE);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(TEMPLATE, packet));                 
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -464,8 +486,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetXdc(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == XDC);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(XDC, packet));
+            XfaPackets.RemoveAll(o => o.Key == XDC);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(XDC, packet));
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -473,8 +495,8 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void SetXfdf(XmlDocument packet)
         {
-            XFANodes.RemoveAll(o => o.Key == XFDF);
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(XFDF, packet));             
+            XfaPackets.RemoveAll(o => o.Key == XFDF);
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(XFDF, packet));             
         }
         /// <summary>
         /// Sets or replaces the XMP Packet
@@ -493,7 +515,7 @@ namespace XfaPdfBuilder
         /// <param name="packet">Packet to add</param>
         public void AddCustomPacket(string packetName, XmlDocument packet)
         {
-            XFANodes.Add(new KeyValuePair<string, XmlDocument>(packetName, packet));  
+            XfaPackets.Add(new KeyValuePair<string, XmlDocument>(packetName, packet));  
         }
         /// <summary>
         /// Sets or replaces the XDP Packet
@@ -574,10 +596,10 @@ namespace XfaPdfBuilder
     {
         static void Main(string[] args)
         {
-            var fs = new FileStream("C:\\Users\\John\\Desktop\\pdf\\emi.pdf", FileMode.Create);
+            var fs = new FileStream("C:\\Users\\jdziu_000\\Desktop\\pdf\\emi.pdf", FileMode.Create);
             var shell = new ShellXdpPdf(fs);
             //set location where external references (in XDP packets) can be found
-            shell.resolverPath = "C:\\Users\\John\\Desktop\\pdf";
+            shell.resolverPath = "C:\\Users\\jdziu_000\\Desktop\\pdf";
 
             var currentMethod = LayoutStyle.Array;
                                     
@@ -589,7 +611,7 @@ namespace XfaPdfBuilder
              }*/
             
             var font  = new Font(iTextSharp.text.Font.FontFamily.TIMES_ROMAN);
-            var para = new Paragraph("Your PDF reader cannot render XFA documents. Try Adobe Acrobat or Adobe Reader.", font);                      
+            var para = new Paragraph("Please wait...", font);                      
             
             shell.ShellDocument.Add(para);
             //does nothing, but write it out, to match ES4 output
@@ -606,18 +628,18 @@ namespace XfaPdfBuilder
             }
             else
             {
-                {
-                    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0100_VersChkStrings", FileMode.Open));
-                    shell.Writer.AddJavaScript("!ADBE::0100_VersChkStrings", reader.ReadToEnd());
-                }
-                {
-                    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0100_VersChkVars", FileMode.Open));
-                    shell.Writer.AddJavaScript("!ADBE::0100_VersChkVars", reader.ReadToEnd());
-                }
-                {
-                    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0200_VersChkCode_XFACheck", FileMode.Open));
-                    shell.Writer.AddJavaScript("!ADBE::0200_VersChkCode_XFACheck", reader.ReadToEnd());
-                }
+                //{
+                //    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0100_VersChkStrings", FileMode.Open));
+                //    shell.Writer.AddJavaScript("!ADBE::0100_VersChkStrings", reader.ReadToEnd());
+                //}
+                //{
+                //    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0100_VersChkVars", FileMode.Open));
+                //    shell.Writer.AddJavaScript("!ADBE::0100_VersChkVars", reader.ReadToEnd());
+                //}
+                //{
+                //    var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\0200_VersChkCode_XFACheck", FileMode.Open));
+                //    shell.Writer.AddJavaScript("!ADBE::0200_VersChkCode_XFACheck", reader.ReadToEnd());
+                //}
                 {
                     var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\preamble", FileMode.Open));
                     shell.SetPreamble(reader.ReadToEnd());
