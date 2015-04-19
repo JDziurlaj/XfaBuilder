@@ -11,6 +11,7 @@ using System.Xml.XPath;
 using iTextSharp.text;
 using iTextSharp.text.error_messages;
 using iTextSharp.text.pdf;
+using XfaBuilder;
 
 /* 
  * Copyright (c) 2015 John Dziurlaj
@@ -596,6 +597,15 @@ namespace XfaPdfBuilder
     {
         static void Main(string[] args)
         {
+            {
+                var img = new FileStream("C:\\Users\\jdziu_000\\Desktop\\pdf\\7.0\\empty static.pdf", FileMode.Open);
+                var reader = new BinaryReader(img);
+                var pdfpack = new PdfPacket(reader.ReadBytes((int)img.Length));
+                Console.WriteLine(pdfpack.Packet.InnerXml);
+                Console.ReadKey();
+            }
+
+
             var fs = new FileStream("C:\\Users\\jdziu_000\\Desktop\\pdf\\emi.pdf", FileMode.Create);
             var shell = new ShellXdpPdf(fs);
             //set location where external references (in XDP packets) can be found
