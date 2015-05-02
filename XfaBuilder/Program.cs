@@ -18,8 +18,9 @@ using iTextSharp.text.pdf;
 namespace XfaPdfBuilder
 {
     /* A PDF reader may ignore any value which is a single stream as that form is deprecated. 
-     * Use pf Array is thus strongly recommended */
-    enum LayoutStyle { Stream, Array }
+     *  Use of Array is thus strongly recommended.
+     */
+    enum LayoutStyle { SingleStream, Array }
 
     class ShellXdpPdf
     {
@@ -155,10 +156,11 @@ namespace XfaPdfBuilder
             {
                 //we have to create a at least one AcroForm Field, so when
                 //IsValid is called, the catalog entries will get created
-                //var afHiddenField = writer.AcroForm.AddHiddenField("1", "2");
+                var afHiddenField = writer.AcroForm.AddHiddenField("1", "2");                
                 //we are using appearance as a method to seed the /DR dictionary
                 // with fonts
-                var appearance = PdfAppearance.CreateAppearance(writer, 0, 0);
+                
+                var appearance = PdfAppearance.CreateAppearance(writer, 0, 0);                
                 //get all fonts from the XDP template packet
                 var fontNodes = templateXmlDocument.SelectNodes("/template:template/*//template:font/@typeface", nsmgr);
 
@@ -170,9 +172,11 @@ namespace XfaPdfBuilder
                     appearance.SetFontAndSize(FontFactory.GetFont(fontNode.Value, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED).BaseFont, 0);
                     TrueTypeFont ttf;
                     PdfIndirectReference dicRef;
-                    dicRef = WriteTTF(fontNode.Value, writer, out ttf);
-                    innerfontDictionary.Put(new PdfName(ttf.PostscriptFontName), dicRef);
+                    //dicRef = WriteTTF(fontNode.Value, writer, out ttf);
+                    //innerfontDictionary.Put(new PdfName(ttf.PostscriptFontName), dicRef);
                 }
+
+                appearance.SetFontAndSize(FontFactory.GetFont(BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED).BaseFont, 0);
                 /*  {
                       TrueTypeFont ttf;
                       PdfIndirectReference dicRef;
@@ -192,7 +196,7 @@ namespace XfaPdfBuilder
             //var font = FontFactory.GetFont("Arial");
             //templ.SetFontAndSize(font.BaseFont, 12);                                                
             #region XFA Generation
-            if (style == LayoutStyle.Stream)
+            if (style == LayoutStyle.SingleStream)
             {
                 if (package != null)
                 {
@@ -596,13 +600,15 @@ namespace XfaPdfBuilder
     {
         static void Main(string[] args)
         {
-            var fs = new FileStream("C:\\Users\\jdziu_000\\Desktop\\pdf\\emi.pdf", FileMode.Create);
+            var fs = new FileStream("C:\\Users\\John\\Desktop\\pdf\\emi.pdf", FileMode.Create);
             var shell = new ShellXdpPdf(fs);
             //set location where external references (in XDP packets) can be found
-            shell.resolverPath = "C:\\Users\\jdziu_000\\Desktop\\pdf";
+            shell.resolverPath = "C:\\Users\\john\\Desktop\\pdf";
 
             var currentMethod = LayoutStyle.Array;
-                                    
+
+            
+
              /* PdfReader pr = new PdfReader("c:\\temp\\Logical.pdf");
               for(int i = 1; i <= pr.NumberOfPages; i++)
              {
@@ -619,7 +625,7 @@ namespace XfaPdfBuilder
             shell.Writer.AddPageDictEntry(PdfName.CROPBOX, new PdfRectangle(PageSize.LETTER));
 
             //template, datasets and config packets are always required!            
-            if (currentMethod == LayoutStyle.Stream)
+            if (currentMethod == LayoutStyle.SingleStream)
             {
                 var xmlDoc = new XmlDocument();
                 xmlDoc.Load("c:\\temp\\xfabuilder\\xdp");
