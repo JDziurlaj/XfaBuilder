@@ -5,6 +5,10 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 
+/* 
+ * Copyright (c) 2015 John Dziurlaj
+ * Program under terms of license located in license.txt
+ */
 namespace XfaBuilder
 {
     class PdfPacket

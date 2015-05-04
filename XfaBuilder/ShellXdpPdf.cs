@@ -14,17 +14,26 @@ using iTextSharp.text.pdf;
 using XfaBuilder;
 using XfaPdfBuilder;
 
-
+/* 
+ * Copyright (c) 2015 John Dziurlaj
+ * Program under terms of license located in license.txt
+ */
 namespace XfaBuilder
 {
+
+   /* A PDF reader may ignore any value which is a single stream as that form is deprecated. 
+   * Use pf Array is thus strongly recommended */
+    public enum LayoutStyle { Stream, Array }
+    public enum XfaVersion { Xfa20, Xfa22, Xfa24, Xfa25, Xfa26, Xfa27, Xfa28, Xfa30, Xfa31, Xfa33 }
+
     class ShellXdpPdf
     {
         private Stream outputStream;
         private Document shellDocument;
         public Document ShellDocument
         { get { return shellDocument; } }
-        //the absolute path from which relative paths can be resolved
-
+        
+        /**the absolute path from which relative paths can be resolved*/
         public string resolverPath { get; set; }
         private PdfWriter writer;
         public PdfWriter Writer { get { return writer; } }
@@ -93,8 +102,8 @@ namespace XfaBuilder
         /// A PDF "boilerplate" is displayed if the viewer
         /// doesn't understand XFA.
         /// Limitations        
-        /// 2. Does not support embedded fonts
-        /// 3. Does not support fonts other than TrueType
+        /// 1. Does not support embedded fonts
+        /// 2. Does not support fonts other than TrueType
         /// Does not support tagged documents (StructTreeRoot)
         /// </summary>
         /// <param name="output"></param>
@@ -105,7 +114,7 @@ namespace XfaBuilder
             shellDocument = new Document();
             outputStream = output;
 
-            writer = /*new PdfCopy(shellDocument, output);*/PdfCopy.GetInstance(shellDocument, output);
+            writer = PdfCopy.GetInstance(shellDocument, output);
 
             //LiveCycle Designer uses Full Compression so do we!
             writer.SetFullCompression();
@@ -134,6 +143,25 @@ namespace XfaBuilder
             var xfaArr = new PdfArray();
 
             acroForm.Put(PdfName.DA, new PdfString("/Helv 0 Tf 0 g "));
+
+            //convert stream, if one, to a array of packets
+            if(package != null)
+            {
+                foreach(XmlNode elem in package.ChildNodes[1])
+                {
+                    //root is preamble
+                    var single = elem.SelectSingleNode(".");                    
+
+
+                    if(elem.GetType() == typeof(XmlElement))
+                    {
+                        var doc = new XmlDocument();
+                        doc.LoadXml(elem.OuterXml);
+                        XfaPackets.Add(new KeyValuePair<string, XmlDocument>(elem.Name, doc));                        
+                    }
+                }
+            }
+
 
             //TODO don't assume!
             var templateXmlDocument = XfaPackets.Single(o => o.Key == "template").Value;
@@ -195,8 +223,7 @@ namespace XfaBuilder
                     byte[] bytes = System.Text.Encoding.ASCII.GetBytes(package.InnerXml);
                     var currentPs = new PdfStream(bytes);
                     currentPs.FlateCompress(writer.CompressionLevel);
-                    var curRef = writer.AddToBody(currentPs).IndirectReference;
-                    PdfString curStr = new PdfString("preamble");
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;                    
                     acroForm.Put(new PdfName("XFA"), curRef);
                     Console.WriteLine(String.Format("Writing out stream {0}: {1} bytes", "XFA", bytes.Length));
                 }
@@ -248,7 +275,7 @@ namespace XfaBuilder
                         var currentPs = new PdfStream(bytes);
                         currentPs.FlateCompress(writer.CompressionLevel);
                         var curRef = writer.AddToBody(currentPs).IndirectReference;
-                        PdfString curStr = new PdfString("preamble");
+                        PdfString curStr = new PdfString("postamble");
                         xfaArr.Add(curStr);
                         xfaArr.Add(curRef);
                         Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "postamble", bytes.Length));

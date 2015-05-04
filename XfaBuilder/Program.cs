@@ -15,23 +15,15 @@ using XfaBuilder;
 
 /* 
  * Copyright (c) 2015 John Dziurlaj
+ * Program under terms of license located in license.txt
  */
 namespace XfaPdfBuilder
-{
-    /* A PDF reader may ignore any value which is a single stream as that form is deprecated. 
-     * Use pf Array is thus strongly recommended */
-    public enum LayoutStyle { Stream, Array }
-
-  
-    public class  Program
+{    
+    public class Program
     {
         static void Main(string[] args)
         {
             Console.WriteLine("XfaBuilder");
-            if(args.Count() == 0)
-            {
-                Console.WriteLine("Usage: ")
-            }
 
           /*  {
                 var img = new FileStream("C:\\temp\\pdf\\7.0\\empty static.pdf", FileMode.Open);
@@ -47,7 +39,7 @@ namespace XfaPdfBuilder
             //set location where external references (in XDP packets) can be found
             shell.resolverPath = "C:\\temp\\pdf";
 
-            var currentMethod = LayoutStyle.Array;
+            var currentMethod = LayoutStyle.Stream;
                                     
              /* PdfReader pr = new PdfReader("c:\\temp\\Logical.pdf");
               for(int i = 1; i <= pr.NumberOfPages; i++)
@@ -90,11 +82,11 @@ namespace XfaPdfBuilder
                     var reader = new StreamReader(new FileStream("c:\\temp\\xfabuilder\\preamble", FileMode.Open));
                     shell.SetPreamble(reader.ReadToEnd());
                 }
-              /*  {
+                {
                     var xmlDoc = new XmlDocument();
                     xmlDoc.Load("c:\\temp\\xfabuilder\\config");
                     shell.SetConfig(xmlDoc);
-                }*/
+                }
                 {
                     var xmlDoc = new XmlDocument();
                     xmlDoc.Load("c:\\temp\\xfabuilder\\template");
