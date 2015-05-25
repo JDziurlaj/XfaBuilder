@@ -40,6 +40,7 @@ namespace XfaPdfBuilder
             shell.resolverPath = "C:\\temp\\pdf";
 
             var currentMethod = LayoutStyle.Stream;
+            shell.style = LayoutStyle.Array;
                                     
              /* PdfReader pr = new PdfReader("c:\\temp\\Logical.pdf");
               for(int i = 1; i <= pr.NumberOfPages; i++)

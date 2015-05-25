@@ -144,17 +144,40 @@ namespace XfaBuilder
 
             acroForm.Put(PdfName.DA, new PdfString("/Helv 0 Tf 0 g "));
 
-            //convert stream, if one, to a array of packets
+            //convert stream, if one, to a array of packets            
             if(package != null)
             {
-                foreach(XmlNode elem in package.ChildNodes[1])
+                var xfaRoot = package.ChildNodes[1];
+
+                //rebuild the preamble
+                var preambleSb = new StringBuilder();
+                preambleSb.Append("<");
+                preambleSb.Append(xfaRoot.Name);
+                //copy attributes
+                int numberOfAttributes = 0;
+                foreach(XmlAttribute attribute in xfaRoot.Attributes)
                 {
-                    //root is preamble
+                //if (numberOfAttributes++ > 0)
+                        preambleSb.Append(" ");
+                    preambleSb.Append(attribute.Name);
+                    preambleSb.Append("=");
+                    preambleSb.Append("\"");
+                    preambleSb.Append(attribute.Value);
+                    preambleSb.Append("\"");                    
+                }
+                preambleSb.Append(">");
+                //copy preamble back into it's expected location
+                this.preamble = preambleSb.ToString();
+                this.postamble = "</" + xfaRoot.Name + ">";
+                //copy all the packets into their expected location
+                foreach (XmlNode elem in xfaRoot)
+                {                    
                     var single = elem.SelectSingleNode(".");                    
 
 
                     if(elem.GetType() == typeof(XmlElement))
                     {
+                        Console.WriteLine("Adding " + elem.Name + " to Array");
                         var doc = new XmlDocument();
                         doc.LoadXml(elem.OuterXml);
                         XfaPackets.Add(new KeyValuePair<string, XmlDocument>(elem.Name, doc));                        
@@ -223,7 +246,7 @@ namespace XfaBuilder
                     byte[] bytes = System.Text.Encoding.ASCII.GetBytes(package.InnerXml);
                     var currentPs = new PdfStream(bytes);
                     currentPs.FlateCompress(writer.CompressionLevel);
-                    var curRef = writer.AddToBody(currentPs).IndirectReference;                    
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;
                     acroForm.Put(new PdfName("XFA"), curRef);
                     Console.WriteLine(String.Format("Writing out stream {0}: {1} bytes", "XFA", bytes.Length));
                 }
@@ -236,52 +259,52 @@ namespace XfaBuilder
                         streamStr.Append(packet.Value.InnerXml);
                     }
                     streamStr.Append(postamble);
-                    throw new NotImplementedException("Software does not currently know how to convert from Array to Stream format.");
+                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(streamStr.ToString());
+                    var currentPs = new PdfStream(bytes);
+                    currentPs.FlateCompress(writer.CompressionLevel);
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;
+                    acroForm.Put(new PdfName("XFA"), curRef);
+                    Console.WriteLine(String.Format("Writing out stream {0}: {1} bytes", "XFA", bytes.Length));
                 }
             }
             else
             {
-                if (package != null)
-                {
-                    throw new NotImplementedException("Software does not currently know how to convert from Stream to Array format.");
-                }
-                else
-                {
-                    {
-                        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(preamble);
-                        var currentPs = new PdfStream(bytes);
-                        currentPs.FlateCompress(writer.CompressionLevel);
-                        var curRef = writer.AddToBody(currentPs).IndirectReference;
-                        PdfString curStr = new PdfString("preamble");
-                        xfaArr.Add(curStr);
-                        xfaArr.Add(curRef);
-                        Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "preamble", bytes.Length));
-                    }
-                    /* The packets can appear in any order */
-                    foreach (var packet in XfaPackets)
-                    {
-                        //TODO - do a raw byte copy
-                        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(packet.Value.InnerXml);
-                        var currentPs = new PdfStream(bytes);
-                        currentPs.FlateCompress(writer.CompressionLevel);
-                        var curRef = writer.AddToBody(currentPs).IndirectReference;
-                        PdfString curStr = new PdfString(packet.Key);
-                        xfaArr.Add(curStr);
-                        xfaArr.Add(curRef);
-                        Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", packet.Key, bytes.Length));
-                    }
-                    {
-                        byte[] bytes = System.Text.Encoding.ASCII.GetBytes(postamble);
-                        var currentPs = new PdfStream(bytes);
-                        currentPs.FlateCompress(writer.CompressionLevel);
-                        var curRef = writer.AddToBody(currentPs).IndirectReference;
-                        PdfString curStr = new PdfString("postamble");
-                        xfaArr.Add(curStr);
-                        xfaArr.Add(curRef);
-                        Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "postamble", bytes.Length));
 
-                    }
+                {
+                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(preamble);
+                    var currentPs = new PdfStream(bytes);
+                    currentPs.FlateCompress(writer.CompressionLevel);
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;
+                    PdfString curStr = new PdfString("preamble");
+                    xfaArr.Add(curStr);
+                    xfaArr.Add(curRef);
+                    Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "preamble", bytes.Length));
                 }
+                /* The packets can appear in any order */
+                foreach (var packet in XfaPackets)
+                {
+                    //TODO - do a raw byte copy
+                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(packet.Value.InnerXml);
+                    var currentPs = new PdfStream(bytes);
+                    currentPs.FlateCompress(writer.CompressionLevel);
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;
+                    PdfString curStr = new PdfString(packet.Key);
+                    xfaArr.Add(curStr);
+                    xfaArr.Add(curRef);
+                    Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", packet.Key, bytes.Length));
+                }
+                {
+                    byte[] bytes = System.Text.Encoding.ASCII.GetBytes(postamble);
+                    var currentPs = new PdfStream(bytes);
+                    currentPs.FlateCompress(writer.CompressionLevel);
+                    var curRef = writer.AddToBody(currentPs).IndirectReference;
+                    PdfString curStr = new PdfString("postamble");
+                    xfaArr.Add(curStr);
+                    xfaArr.Add(curRef);
+                    Console.WriteLine(String.Format("Writing out packet {0}: {1} bytes", "postamble", bytes.Length));
+
+                }
+
                 acroForm.Put(new PdfName("XFA"), xfaArr);
             }
             #endregion
