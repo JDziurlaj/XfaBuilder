@@ -52,7 +52,7 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
-    <None Include="XFABuilder.md" />
+    <None Include="readme.md" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="license.txt" />
