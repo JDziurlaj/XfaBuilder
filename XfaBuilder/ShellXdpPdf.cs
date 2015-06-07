@@ -44,12 +44,16 @@ namespace XfaBuilder
          */
         public LayoutStyle style = LayoutStyle.Array;
 
+        /*
         public const String XFA_DATA_SCHEMA = "http://www.xfa.org/schema/xfa-data/1.0/";
         public const String XDP_SCHEMA = "http://ns.adobe.com/xdp/";
+        */
         /* 2.8 is the version created by Designer ES2 */
+        /*
         public const String XFA_TEMPLATE_SCHEMA_2_8 = "http://www.xfa.org/schema/xfa-template/2.8/";
         public const String XFA_CONFIG_SCHEMA_2_8 = "http://www.xfa.org/schema/xci/2.8/";
         public const String XFA_LOCALE_SCHEMA_2_7 = "http://www.xfa.org/schema/xfa-locale-set/2.7/";
+        */
 
         /** Packets recognized by the XFA 3.3 Specification */
         public const String CONFIG = "config";
@@ -57,14 +61,14 @@ namespace XfaBuilder
         public const String DATASETS = "datasets";
         public const String LOCALE_SET = "localeSet";
         public const String PDF = "pdf";
-        public const String SIGNATURE = "signature";
+        /*public const String SIGNATURE = "signature";*/
         public const String SOURCE_SET = "sourceSet";
         public const String STYLESHEET = "stylesheet";
         public const String TEMPLATE = "template";
         public const String XDC = "xdc";
 
         /** Packets seen in the wild */
-        public const String XMPMETA = "xmpmeta";
+        /*public const String XMPMETA = "xmpmeta";*/
         public const String XFDF = "xfdf";
         public const String FORM = "form";
 
@@ -73,19 +77,20 @@ namespace XfaBuilder
         public const String POSTAMBLE = "postamble";
 
 
-        /* If a user wants to work with a stream instead of an array they can set this */
+        /** If a user wants to work with a stream instead of an array they can set this */
         private XmlDocument package;
-        /* Contains all the XFA Packets */
+
+        /** Contains all the XFA Packets */
         private List<KeyValuePair<string, XmlDocument>> XfaPackets;
-        /* These packets must be handled separately as their order matters*/
+        /** These packets must be handled separately as their order matters*/
         private string preamble { get; set; }
         private string postamble { get; set; }
 
         /* Non packet data */
         private XmlDocument xmpMeta { get; set; }
-
         private PdfStream metadataPs;
 
+        /*
         PdfString xdpStr = new PdfString("preamble");
         PdfString configStr = new PdfString(CONFIG);
         PdfString templateStr = new PdfString(TEMPLATE);
@@ -95,6 +100,7 @@ namespace XfaBuilder
         PdfString formStr = new PdfString(FORM);
         PdfString datasetsStr = new PdfString(DATASETS);
         PdfString closexdpStr = new PdfString("postamble");
+        */
 
         /// <summary>
         /// Create a Shell PDF. This type of PDF contains all
@@ -148,7 +154,11 @@ namespace XfaBuilder
             if(package != null)
             {
                 var xfaRoot = package.ChildNodes[1];
-
+                if(xfaRoot.Name != "xdp")
+                {
+                    throw new InvalidDataException("XmlNode named xdp expected, got " + xfaRoot.Name);
+                }
+                #region xdp_wrapper
                 //rebuild the preamble
                 var preambleSb = new StringBuilder();
                 preambleSb.Append("<");
@@ -184,10 +194,12 @@ namespace XfaBuilder
                     }
                 }
             }
+                #endregion
 
-
-            //TODO don't assume!
-            var templateXmlDocument = XfaPackets.Single(o => o.Key == "template").Value;
+            var templatePacket = XfaPackets.SingleOrDefault(o => o.Key == "template");
+            //TODO nullcheck
+            //    throw new InvalidDataException("No template packet found!");
+            var templateXmlDocument = templatePacket.Value;
             XmlNamespaceManager nsmgr = new XmlNamespaceManager(templateXmlDocument.NameTable);
             //must provide namespace!
             //http://msdn.microsoft.com/en-us/library/e5t11tzt%28v=vs.110%29.aspx
@@ -267,9 +279,8 @@ namespace XfaBuilder
                     Console.WriteLine(String.Format("Writing out stream {0}: {1} bytes", "XFA", bytes.Length));
                 }
             }
-            else
+            else //Array
             {
-
                 {
                     byte[] bytes = System.Text.Encoding.ASCII.GetBytes(preamble);
                     var currentPs = new PdfStream(bytes);
